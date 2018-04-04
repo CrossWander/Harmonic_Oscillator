@@ -5,12 +5,10 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Diagnostics;
 using System.IO;
+using System.Collections.Generic;
 
 namespace Harmonic_Oscillator
 {
-    /// <summary>
-    /// Логика взаимодействия для MainWindow.xaml
-    /// </summary>
     public partial class MainWindow : Window
     {
         public MainWindow()
@@ -18,10 +16,10 @@ namespace Harmonic_Oscillator
             InitializeComponent();
         }
 
+
         bool Freq_mode = false; //режим работы
         bool Freq_solve = false;
         double pi = Math.PI;
-        string text;    //переменная для считывания значений из textbox
         double Amplitude;  //амплитуда
         double Frequency;  //частота
         double Phase;      //фаза
@@ -29,15 +27,11 @@ namespace Harmonic_Oscillator
         double Time_max;   //макс. время моделирования
         double h;   //шаг моделирования
         double w;   //круговая частота
-        uint MAX_DLINA = 40000000;
         long steps;
         DateTime Start; // Время запуска
         DateTime Stoped; //Время окончания
         TimeSpan Elapsed = new TimeSpan(); // Разница
         TimeSpan Time;
-
-        
-      
 
 
         #region Interface_work
@@ -67,7 +61,7 @@ namespace Harmonic_Oscillator
             ab.Show();
         }
 
-        #region Validation
+        #region Validation of keystrokes
         private void Validation_text(object sender, KeyEventArgs e)
         {
             if (Char.IsDigit((char)KeyInterop.VirtualKeyFromKey(e.Key)) == false)
@@ -102,19 +96,14 @@ namespace Harmonic_Oscillator
         {
             this.Print_Result.Text = string.Empty;
 
-            text = Amplitude_number.Text;
-            Amplitude = double.Parse(text);
-            text = Frequency_number.Text;
-            Frequency = double.Parse(text);
-            text = Phase_number.Text;
-            Phase = double.Parse(text);
-            text = Error_number.Text;
-            max_Error = double.Parse(text);
-            text = Time_number.Text;
-            Time_max = double.Parse(text);
+            Amplitude = double.Parse(Amplitude_number.Text);
+            Frequency = double.Parse(Frequency_number.Text);
+            Phase = double.Parse(Phase_number.Text);
+            max_Error = double.Parse(Error_number.Text);
+            Time_max = double.Parse(Time_number.Text);
 
             Start = DateTime.Now;
-            var timer = Stopwatch.StartNew();
+
             if (Freq_mode)
             {
                 double freq_step = Frequency;
@@ -126,12 +115,14 @@ namespace Harmonic_Oscillator
                     w = 2 * pi * Frequency;
                     h = 0.01 * max_Error / w;
                     var ttimer = Stopwatch.StartNew();
-                    if (method_Euler.IsChecked == true)
+                    //генерирование синусоиды выбраным численным методом
+                    if (method_Euler.IsChecked == true)                 
                         steps = solveEuler(Amplitude, Frequency, Phase, max_Error, Time_max, w, h);
                     if (method_Runge_Kutta.IsChecked == true)
                         steps = solveRunge_Kutta(Amplitude, Frequency, Phase, max_Error, Time_max, w, h);
                     if (method_Adams_Bachfort.IsChecked == true)
                         steps = solveAdams_Bachfort(Amplitude, Frequency, Phase, max_Error, Time_max, w, h);
+
                     ttimer.Stop();
                     if (Time.Milliseconds <= ttimer.ElapsedMilliseconds)
                     {
@@ -143,9 +134,10 @@ namespace Harmonic_Oscillator
                 Frequency -= freq_step;
                 Frequency /= Time_max;
             }
+
             w = 2 * pi * Frequency;
             h = 0.01 * max_Error / w;
-
+            var timer = Stopwatch.StartNew();
 
             //генерирование синусоиды выбраным численным методом
             if (method_Euler.IsChecked == true)
@@ -157,7 +149,6 @@ namespace Harmonic_Oscillator
             if (method_Adams_Bachfort.IsChecked == true)
                 //вызов функции решений методом Адамса-Башфорта
                 steps = solveAdams_Bachfort(Amplitude, Frequency, Phase, max_Error, Time_max, w, h);
-
 
             Stoped = DateTime.Now;
             Elapsed = Stoped.Subtract(Start);
@@ -186,6 +177,27 @@ namespace Harmonic_Oscillator
 
         }
 
+
+        void results_into_the_file(double h, long step, List<double> masX, List<double> massOrigin, List<double> massErr)
+        {
+            if ((!Freq_mode) || (Freq_solve))
+            {
+                double time = 0;
+
+                StreamWriter sw = new StreamWriter(new FileStream(@"sin_Euler.dat", FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read));
+
+                for (int j = 0; j < step; j++)
+                {
+                    sw.WriteLine(time + " " + massOrigin[j] + " " + masX[j] + " " + massErr[j]);
+                    //столбцы:  время  синус(оригинал)  синус по методу  погрешность 
+                    time += h;
+                }
+                sw.Close();
+                Freq_solve = false;
+            }
+        }
+
+
         #region method_Euler
         long solveEuler(double Ampl, 
                         double Freq, 
@@ -201,12 +213,9 @@ namespace Harmonic_Oscillator
             double yNew, yOld;
             double dx, dy, delta; //погрешность
 
-            double[] masX = new double[MAX_DLINA];
-            double[] massOrigin = new double[MAX_DLINA];
-            double[] massErr = new double[MAX_DLINA];
-         /*   List<double> masX = new List<double>();
+            List<double> masX = new List<double>();
             List<double> massOrigin = new List<double>();
-            List<double> massErr = new List<double>();*/
+            List<double> massErr = new List<double>();
 
             tSim = h;
 
@@ -215,9 +224,9 @@ namespace Harmonic_Oscillator
             yOld = Ampl * Math.Cos(Phase);
 
 
-            massOrigin[0] = masX[0] = Ampl * Math.Sin(Phase);
-            //massOrigin.Add(Ampl * Math.Sin(Phase));
-            //masX.Add(Ampl * Math.Sin(Phase));
+            massOrigin.Add(Ampl * Math.Sin(Phase));
+            masX.Add(Ampl * Math.Sin(Phase));
+            massErr.Add(Ampl * Math.Sin(Phase));
             step = 1;
 
             do
@@ -231,9 +240,9 @@ namespace Harmonic_Oscillator
 
                 if ((!Freq_mode)||(Freq_solve))
                 {
-                    masX[step] = xNew;
-                    massOrigin[step] = Ampl * Math.Sin(w * tSim + Phase);
-                    massErr[step] = Math.Abs(Ampl * Math.Sin(w * tSim + Phase) - xNew);
+                    masX.Add(xNew);
+                    massOrigin.Add(Ampl * Math.Sin(w * tSim + Phase));
+                    massErr.Add(Math.Abs(Ampl * Math.Sin(w * tSim + Phase) - xNew));
                 }
 
                 xOld = xNew;
@@ -242,58 +251,14 @@ namespace Harmonic_Oscillator
                 if (dx > dy) delta = dx;
                 else delta = dy;
 
-            /*    masX.Add(xNew);
-                massOrigin.Add(Ampl * Math.Sin(w * tSim + Phase));
-                massErr.Add(Math.Abs(Ampl * Math.Sin(w * tSim + Phase) - xNew));*/
-
                 step++; //for debug
                 tSim += h;
 
 
             } while ((delta<=Error)&&(tSim <= max_Time));
-            if ((!Freq_mode) || (Freq_solve))
-            {
-                double time = 0;
-               // long perem = 0;
-               // int i = 0;
-              /*  var arr = new string[] { "sin_Euler1.dat", "sin_Euler2.dat", "sin_Euler3.dat",
-                    "sin_Euler4.dat", "sin_Euler5.dat","sin_Euler6.dat","sin_Euler7.dat","sin_Euler8.dat",
-                    "sin_Euler9.dat","sin_Euler10.dat","sin_Euler11.dat","sin_Euler12.dat","sin_Euler13.dat",
-                    "sin_Euler14.dat","sin_Euler15.dat","sin_Euler16.dat","sin_Euler17.dat","sin_Euler18.dat",
-                    "sin_Euler19.dat","sin_Euler20.dat","sin_Euler21.dat","sin_Euler22.dat","sin_Euler23.dat"};
-                  bool perv_zap = true;
-               */
-                StreamWriter sw = new StreamWriter(new FileStream(@"sin_Euler.dat", FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read));
 
-              /*  for (int j = 0; j < step; j++)
-                {  
-                    if (perem < 1000000)
-                    {
-                            sw.WriteLine(time + " " + massOrigin[j] + " " + masX[j] + " " + massErr[j]);                     
-                    }
-                    else
-                    {
-                        perem = 0;
-                        i++;
-                    }
-                    if (!perv_zap)
-                    {
-                        if ((perem == 0))
-                            sw = new StreamWriter(new FileStream(@arr[i], FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read));
-                    }
-                    perem++;
-                    time += h;
-                    perv_zap = false;
-                }*/
-                for (int j = 0; j < step; j++)
-                {
-                    sw.WriteLine(time + " " + massOrigin[j] + " " + masX[j] + " " + massErr[j]);
-                    //столбцы:  время  синус(оригинал)  синус по методу  погрешность 
-                    time += h;
-                }
-                sw.Close();
-                Freq_solve = false;
-            }
+            results_into_the_file(h,step,masX,massOrigin,massErr);
+
             return step;
         }
 
@@ -316,9 +281,9 @@ namespace Harmonic_Oscillator
             double ky1, ky2, ky3, ky4;
             double dx, dy, delta; //погрешность
 
-            double[] masX = new double[MAX_DLINA];
-            double[] massOrigin = new double[MAX_DLINA];
-            double[] massErr = new double[MAX_DLINA];
+            List<double> masX = new List<double>();
+            List<double> massOrigin = new List<double>();
+            List<double> massErr = new List<double>();
 
 
             tSim = h;
@@ -326,7 +291,9 @@ namespace Harmonic_Oscillator
             xOld = Ampl * Math.Sin(Phase);
             yOld = Ampl * Math.Cos(Phase);
 
-            massOrigin[0] = masX[0] = Ampl * Math.Sin(Phase);
+            massOrigin.Add(Ampl * Math.Sin(Phase));
+            masX.Add(Ampl * Math.Sin(Phase));
+            massErr.Add(Ampl * Math.Sin(Phase));
 
             step = 1;
 
@@ -355,9 +322,9 @@ namespace Harmonic_Oscillator
 
                 if ((!Freq_mode)||(Freq_solve))
                 {
-                    masX[step] = xNew; 
-                    massOrigin[step] = Ampl * Math.Sin(w * tSim + Phase);
-                    massErr[step] = Math.Abs(Ampl * Math.Sin(w * tSim + Phase) - xNew);
+                    masX.Add(xNew);
+                    massOrigin.Add(Ampl * Math.Sin(w * tSim + Phase));
+                    massErr.Add(Math.Abs(Ampl * Math.Sin(w * tSim + Phase) - xNew));
                 }
 
                 if (dx > dy) delta = dx;
@@ -368,19 +335,9 @@ namespace Harmonic_Oscillator
 
 
             } while ((delta <= Error) && (tSim <= max_Time));
-            if ((!Freq_mode) || (Freq_solve))
-            {
-                StreamWriter sw = new StreamWriter(new FileStream(@"sin_RK.dat", FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read));
-                double time = 0;
-                for (int j = 0; j < step; j++)
-                {
-                    sw.WriteLine(time + " " + massOrigin[j] + " " + masX[j] + " " + massErr[j]);
-                    //столбцы:  время  синус(оригинал)  синус по методу  погрешность 
-                    time += h;
-                }
-                sw.Close();
-                Freq_solve = false;
-            }
+
+            results_into_the_file(h, step, masX, massOrigin, massErr);
+
             return step;
         }
         #endregion
@@ -400,9 +357,9 @@ namespace Harmonic_Oscillator
             double[] y = new double[3];
             double dx, dy, delta; //погрешность
 
-            double[] masX = new double[MAX_DLINA];
-            double[] massOrigin = new double[MAX_DLINA];
-            double[] massErr = new double[MAX_DLINA];
+            List<double> masX = new List<double>();
+            List<double> massOrigin = new List<double>();
+            List<double> massErr = new List<double>();
 
 
             tSim = h;
@@ -413,7 +370,9 @@ namespace Harmonic_Oscillator
             x[1] = x[0] + h * w * y[0];
             y[1] = y[0] + h * (-w * x[0]);
 
-            massOrigin[0] = masX[0] = Ampl * Math.Sin(Phase);
+            massOrigin.Add(Ampl * Math.Sin(Phase));
+            masX.Add(Ampl * Math.Sin(Phase));
+            massErr.Add(Ampl * Math.Sin(Phase));
 
             step = 1;
 
@@ -432,9 +391,9 @@ namespace Harmonic_Oscillator
 
                 if ((!Freq_mode) || (Freq_solve))
                 {
-                    masX[step] = x[2];
-                    massOrigin[step] = Ampl * Math.Sin(w * tSim + Phase);
-                    massErr[step] = Math.Abs(Ampl * Math.Sin(w * tSim + Phase) - x[2]);
+                    masX.Add(x[2]);
+                    massOrigin.Add(Ampl * Math.Sin(w * tSim + Phase));
+                    massErr.Add(Math.Abs(Ampl * Math.Sin(w * tSim + Phase) - x[2]));
                 }
 
                 if (dx > dy) delta = dx;
@@ -444,19 +403,9 @@ namespace Harmonic_Oscillator
 
 
             } while ((delta <= Error) && (tSim <= max_Time));
-            if ((!Freq_mode) || (Freq_solve))
-            {
-                StreamWriter sw = new StreamWriter(new FileStream(@"sin_AB.dat", FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read));
-                double time = 0;
-                for (int j = 0; j < step; j++)
-                {
-                    sw.WriteLine(time + " " + massOrigin[j] + " " + masX[j] + " " + massErr[j]);
-                    //столбцы:  время  синус(оригинал)  синус по методу  погрешность 
-                    time += h;
-                }
-                sw.Close();
-                Freq_solve = false;
-            }
+
+            results_into_the_file(h, step, masX, massOrigin, massErr);
+
             return step;
         }
         #endregion
